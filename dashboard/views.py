@@ -30,8 +30,11 @@ def get_time_phase():
     elif time(12, 35) <= now < time(13, 25):
         return "LUNCH_BREAK"
 
-    elif time(16, 0) <= now < time(16, 30):
+    elif time(16, 0) <= now < time(18, 0):
         return "ACTIVITIES"
+
+    elif time(18, 0) <= now < time(19, 0):
+        return "OFF_HOURS"
 
     elif now >= time(19, 0) or now < time(6, 0):
         return "NIGHT"
@@ -47,49 +50,62 @@ def default_percentage(btype, phase):
             "SHORT_BREAK": 20,
             "LUNCH_BREAK": 20,
             "ACTIVITIES": 50,
-        },
-        "LAB": {
-            "CLASS_HOURS": 85,
-            "ACTIVITIES": 40,
+            "OFF_HOURS": 0,
         },
         "LIBRARY": {
             "CLASS_HOURS": 60,
             "ACTIVITIES": 50,
+            "OFF_HOURS": 10,
         },
         "ADMIN": {
-            "CLASS_HOURS": 30,   # LOW (as you wanted)
+            "CLASS_HOURS": 30,
+            "OFF_HOURS": 0,
         },
         "CANTEEN": {
             "CLASS_HOURS": 5,
             "SHORT_BREAK": 70,
             "LUNCH_BREAK": 95,
             "ACTIVITIES": 60,
+            "OFF_HOURS": 40,   # only till 6 PM
         },
         "HOSTEL": {
-            "CLASS_HOURS": 20,   # ✅ LOW
-            "SHORT_BREAK": 20,   # ✅ LOW
+            "CLASS_HOURS": 20,
+            "SHORT_BREAK": 20,
             "LUNCH_BREAK": 40,
             "ACTIVITIES": 50,
+            "OFF_HOURS": 70,
             "NIGHT": 90,
         },
-        "SHOP": {
-            "CLASS_HOURS": 40,
-            "SHORT_BREAK": 60,
-            "LUNCH_BREAK": 70,
-            "ACTIVITIES": 60,
-        },
         "AUDITORIUM": {
-            # handled via events
+            # event based
         },
     }
 
     return rules.get(btype, {}).get(phase, 0)
 
+
 # ---------------- EFFECTIVE OCCUPANCY ----------------
 def get_effective_occupancy(building, phase):
     cap = building.capacity
+    now = timezone.localtime().time()
 
-    # 1️⃣ Phase-based admin configuration (HIGHEST PRIORITY)
+    # 🌙 NIGHT RULE
+    if phase == "NIGHT":
+        return int(0.9 * cap) if building.building_type == "HOSTEL" else 0
+
+    # 🏟 AUDITORIUM — event based
+    if building.building_type == "AUDITORIUM":
+        has_event = Event.objects.filter(
+            location__icontains=building.name,
+            event_date=date.today()
+        ).exists()
+        return int(0.8 * cap) if has_event else 0
+
+    # 🍽 CANTEEN closes after 6 PM
+    if building.building_type == "CANTEEN" and now >= time(18, 0):
+        return 0
+
+    # 🔧 ADMIN-DEFINED PHASE OCCUPANCY (highest priority)
     phase_rule = PhaseOccupancy.objects.filter(
         building=building,
         time_phase=phase
@@ -98,42 +114,34 @@ def get_effective_occupancy(building, phase):
     if phase_rule:
         return int((phase_rule.expected_percentage / 100) * cap)
 
-    # 2️⃣ Auditorium → event based
-    if building.building_type == "AUDITORIUM":
-        has_event = Event.objects.filter(
-            location__icontains=building.name,
-            event_date=date.today()
-        ).exists()
-        return int(0.8 * cap) if has_event else 0
-
-    # 3️⃣ Night rule
-    if phase == "NIGHT":
-        return int(0.9 * cap) if building.building_type == "HOSTEL" else 0
-
-    # 4️⃣ Fallback defaults
+    # 🔁 FALLBACK DEFAULT RULES
     percentage = default_percentage(building.building_type, phase)
     return int((percentage / 100) * cap)
 
-# ---------------- VISITOR ----------------
+
+# ---------------- VISITOR PAGE ----------------
 def visitor(request):
     phase = get_time_phase()
     buildings = Building.objects.all()
-    grouped = {}
+    grouped_buildings = {}
 
     for b in buildings:
         occ = get_effective_occupancy(b, phase)
 
         if occ == 0:
-            status, cls = "Closed", "bg-slate-200 text-slate-600"
+            status = "Closed"
+            status_class = "bg-slate-200 text-slate-600"
         elif occ / b.capacity >= 0.6:
-            status, cls = "In Use", "bg-yellow-100 text-yellow-700"
+            status = "In Use"
+            status_class = "bg-yellow-100 text-yellow-700"
         else:
-            status, cls = "Open", "bg-green-100 text-green-700"
+            status = "Open"
+            status_class = "bg-green-100 text-green-700"
 
-        grouped.setdefault(b.building_type, []).append({
+        grouped_buildings.setdefault(b.building_type, []).append({
             "name": b.name,
             "status": status,
-            "status_class": cls
+            "status_class": status_class
         })
 
     todays_events = Event.objects.filter(
@@ -141,7 +149,7 @@ def visitor(request):
     ).order_by("start_time")
 
     return render(request, "visitor_stitch.html", {
-        "grouped_buildings": grouped,
+        "grouped_buildings": grouped_buildings,
         "todays_events": todays_events,
         "time_phase": phase
     })
@@ -157,14 +165,19 @@ def admin_dashboard_stitch(request):
 
         percent = int((b.occupancy / b.capacity) * 100) if b.capacity else 0
 
-        b.width_class = (
-            "w-[10%]" if percent <= 10 else
-            "w-1/4" if percent <= 25 else
-            "w-1/2" if percent <= 50 else
-            "w-3/4" if percent <= 75 else
-            "w-full"
-        )
+        # progress bar width
+        if percent <= 10:
+            b.width_class = "w-[10%]"
+        elif percent <= 25:
+            b.width_class = "w-1/4"
+        elif percent <= 50:
+            b.width_class = "w-1/2"
+        elif percent <= 75:
+            b.width_class = "w-3/4"
+        else:
+            b.width_class = "w-full"
 
+        # status styles
         if percent == 0:
             b.status = "empty"
             b.bar_class = "bg-slate-300"

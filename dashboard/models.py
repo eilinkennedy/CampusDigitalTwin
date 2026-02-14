@@ -5,7 +5,6 @@ class Building(models.Model):
 
     BUILDING_TYPE_CHOICES = [
         ("ACADEMIC", "Academic Block"),
-        ("LAB", "Laboratory"),
         ("HOSTEL", "Hostel"),
         ("CANTEEN", "Canteen"),
         ("LIBRARY", "Library"),
@@ -32,6 +31,7 @@ class Event(models.Model):
     location = models.CharField(max_length=100)
     event_date = models.DateField()
     start_time = models.TimeField()
+    end_time = models.TimeField()   # ✅ NEW
 
     def __str__(self):
         return f"{self.title} ({self.event_date})"
@@ -44,6 +44,7 @@ class PhaseOccupancy(models.Model):
         ("SHORT_BREAK", "Short Break"),
         ("LUNCH_BREAK", "Lunch Break"),
         ("ACTIVITIES", "Activities"),
+        ("OFF_HOURS", "Off Hours"),
         ("NIGHT", "Night"),
     ]
 
