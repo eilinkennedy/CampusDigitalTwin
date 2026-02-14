@@ -1,0 +1,163 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SJCET Campus Digital Twin</title>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+
+<script id="tailwind-config">
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                "primary": "#11d442",
+                "background-light": "#f6f8f6",
+                "background-dark": "#102215",
+                "forest-green": "#0a4a1a",
+                "sage-green": "#e7f3e9",
+                "warm-neutral": "#f5f5f0"
+            },
+            fontFamily: {
+                "display": ["Inter", "sans-serif"]
+            },
+        },
+    },
+}
+</script>
+
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+}
+</style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark font-display min-h-screen flex flex-col">
+
+<!-- Header -->
+<header class="w-full bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-forest-green/10 dark:border-primary/10 sticky top-0 z-50">
+<div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-white shadow-lg shadow-primary/20">
+            <span class="material-icons">account_tree</span>
+        </div>
+        <div>
+            <h1 class="text-xl font-bold text-forest-green dark:text-primary leading-none">SJCET</h1>
+            <p class="text-xs font-medium text-slate-500 dark:text-slate-400 tracking-wider">DIGITAL TWIN</p>
+        </div>
+    </div>
+
+    <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-300">
+        <a class="hover:text-primary transition-colors" href="#">Campus Map</a>
+        <button class="bg-primary text-white px-5 py-2 rounded-lg font-semibold hover:bg-opacity-90 transition-all shadow-md shadow-primary/20">
+            Get Started
+        </button>
+    </nav>
+
+</div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-grow flex flex-col items-center justify-center px-6 py-12 md:py-24">
+
+<!-- Hero Section -->
+<div class="text-center max-w-3xl mb-16">
+<span class="inline-block px-4 py-1.5 mb-6 text-sm font-semibold tracking-wide text-primary bg-primary/10 rounded-full uppercase">
+    Academic visualization platform
+</span>
+
+<h1 class="text-4xl md:text-6xl font-extrabold text-forest-green dark:text-white mb-6 leading-tight">
+    Welcome to SJCET <br/>
+    <span class="text-primary">Campus Digital Twin</span>
+</h1>
+
+<p class="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+    Experience the next generation of campus management. Explore, visualize, and monitor SJCET infrastructure.
+</p>
+</div>
+
+<!-- Navigation Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-7xl">
+
+<!-- Campus Overview -->
+<div class="group bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+    <div class="w-14 h-14 bg-sage-green dark:bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-6">
+        <span class="material-icons text-3xl">dashboard</span>
+    </div>
+    <h3 class="text-2xl font-bold text-forest-green dark:text-white mb-3">Campus Overview</h3>
+    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+        View high-level analytics, occupancy rates, and infrastructure health data across the entire institution.
+    </p>
+    <a href="{% url 'dashboard_ui' %}">
+        <button class="w-full bg-primary text-white py-3.5 rounded-lg font-bold">
+            Enter Dashboard
+        </button>
+    </a>
+</div>
+
+<!-- Visitor -->
+<div class="group bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+    <div class="w-14 h-14 bg-sage-green dark:bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-6">
+        <span class="material-icons text-3xl">explore</span>
+    </div>
+    <h3 class="text-2xl font-bold text-forest-green dark:text-white mb-3">Explore as Visitor</h3>
+    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+        Take an immersive tour of the buildings and facilities.
+    </p>
+    <a href="{% url 'visitor' %}">
+        <button class="w-full bg-primary text-white py-3.5 rounded-lg font-bold">
+            Start Virtual Tour
+        </button>
+    </a>
+</div>
+
+<!-- Admin -->
+<div class="group bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+    <div class="w-14 h-14 bg-sage-green dark:bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-6">
+        <span class="material-icons text-3xl">admin_panel_settings</span>
+    </div>
+    <h3 class="text-2xl font-bold text-forest-green dark:text-white mb-3">Admin Login</h3>
+    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+        Access secure administrative controls and system maintenance.
+    </p>
+    <a href="/admin/">
+        <button class="w-full bg-primary text-white py-3.5 rounded-lg font-bold">
+            Secure Login
+        </button>
+    </a>
+</div>
+
+</div>
+
+<!-- Seamless spacer (matches page background) -->
+<div class="mt-24 w-full h-32 bg-background-light dark:bg-background-dark"></div>
+
+</main>
+
+<!-- Footer -->
+<footer class="mt-auto py-12 bg-white dark:bg-background-dark border-t border-slate-100 dark:border-slate-800">
+<div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+
+<div class="text-slate-400 text-sm">
+    © 2026 St. Joseph’s College of Engineering and Technology. All rights reserved.
+</div>
+
+<div class="flex gap-8 text-sm font-medium text-slate-500">
+    <a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+    <a class="hover:text-primary transition-colors" href="#">Terms of Use</a>
+    <a class="hover:text-primary transition-colors" href="#">Contact Support</a>
+</div>
+
+</div>
+</footer>
+
+</body>
+</html>
+
