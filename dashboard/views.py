@@ -1,13 +1,12 @@
 from django.shortcuts import render
 from django.utils import timezone
 from datetime import time, date
+from django.contrib.auth.decorators import login_required
 from .models import Building, Event, PhaseOccupancy
-
 
 # ================= HOME =================
 def home(request):
     return render(request, "home_stitch.html")
-
 
 # ================= TIME PHASE LOGIC =================
 def get_time_phase():
@@ -38,7 +37,6 @@ def get_time_phase():
 
     return "OFF_HOURS"
 
-
 # ================= DEFAULT FALLBACK RULES =================
 def default_percentage(building_type, phase):
     rules = {
@@ -62,7 +60,7 @@ def default_percentage(building_type, phase):
             "SHORT_BREAK": 70,
             "LUNCH_BREAK": 95,
             "ACTIVITIES": 60,
-            "OFF_HOURS": 0,   # closes after 6 PM
+            "OFF_HOURS": 0,
         },
         "HOSTEL": {
             "CLASS_HOURS": 20,
@@ -71,19 +69,15 @@ def default_percentage(building_type, phase):
             "ACTIVITIES": 60,
             "OFF_HOURS": 90,
         },
-        "AUDITORIUM": {
-            # handled strictly via events
-        }
+        "AUDITORIUM": {}
     }
 
     return rules.get(building_type, {}).get(phase, 0)
 
-
-# ================= EFFECTIVE OCCUPANCY (CORE LOGIC) =================
+# ================= EFFECTIVE OCCUPANCY =================
 def get_effective_occupancy(building, phase):
     capacity = building.capacity
 
-    # ---- AUDITORIUM: EVENT BASED ONLY ----
     if building.building_type == "AUDITORIUM":
         now = timezone.localtime()
         has_active_event = Event.objects.filter(
@@ -95,7 +89,6 @@ def get_effective_occupancy(building, phase):
 
         return int(0.8 * capacity) if has_active_event else 0
 
-    # ---- ADMIN CONFIGURED PHASE OCCUPANCY ----
     phase_entry = PhaseOccupancy.objects.filter(
         building=building,
         time_phase=phase
@@ -104,10 +97,8 @@ def get_effective_occupancy(building, phase):
     if phase_entry:
         return int((phase_entry.expected_percentage / 100) * capacity)
 
-    # ---- FALLBACK DEFAULT RULES ----
     percentage = default_percentage(building.building_type, phase)
     return int((percentage / 100) * capacity)
-
 
 # ================= VISITOR PAGE =================
 def visitor(request):
@@ -131,9 +122,7 @@ def visitor(request):
             "status_class": cls
         })
 
-    # ✅ FIXED EVENT FILTER
     now = timezone.localtime()
-
     todays_events = Event.objects.filter(
         event_date=now.date(),
         end_time__gt=now.time()
@@ -145,20 +134,16 @@ def visitor(request):
         "time_phase": phase
     })
 
-# ================= ADMIN DASHBOARD =================
+# ================= ADMIN DASHBOARD (PROTECTED) =================
+@login_required(login_url='/admin/login/')
 def admin_dashboard_stitch(request):
     phase = get_time_phase()
     buildings = Building.objects.all()
 
     for b in buildings:
-
-        # 🔥 IMPORTANT FIX:
-        # Occupancy is ALWAYS recomputed
         b.occupancy = get_effective_occupancy(b, phase)
-
         percent = int((b.occupancy / b.capacity) * 100) if b.capacity else 0
 
-        # Progress bar width
         b.width_class = (
             "w-[10%]" if percent <= 10 else
             "w-1/4" if percent <= 25 else
@@ -167,7 +152,6 @@ def admin_dashboard_stitch(request):
             "w-full"
         )
 
-        # Status styling
         if percent == 0:
             b.status = "empty"
             b.bar_class = "bg-slate-300"

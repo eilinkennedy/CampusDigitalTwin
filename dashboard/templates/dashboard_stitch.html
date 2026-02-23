@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>SJCET Digital Twin – Dashboard</title>
+
+    <!-- Auto refresh every 15 seconds -->
     <meta http-equiv="refresh" content="15">
 
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
+    <!-- Tailwind Custom Config -->
     <script>
         tailwind.config = {
             theme: {
@@ -34,14 +40,14 @@
     </div>
 </aside>
 
-<!-- MAIN -->
+<!-- MAIN CONTENT -->
 <main class="flex-1 p-8 overflow-y-auto">
 
     <!-- HEADER -->
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold">Building Occupancy Dashboard</h1>
 
-        <!-- TIME PHASE BADGE -->
+        <!-- TIME PHASE -->
         <div class="px-4 py-2 rounded-full bg-white border text-sm font-semibold text-slate-600">
             Current Phase:
             <span class="ml-1 text-primary font-bold">
@@ -50,6 +56,7 @@
         </div>
     </div>
 
+    <!-- BUILDING CARDS -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
 
         {% for b in buildings %}
