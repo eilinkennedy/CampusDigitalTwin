@@ -10,8 +10,8 @@ class BuildingAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ("title", "event_date", "start_time", "location")
-    list_filter = ("event_date",)
+    list_display = ("title", "location", "event_date", "start_time", "end_time")
+    list_filter = ("event_date", "location")
     ordering = ("event_date", "start_time")
 
 
