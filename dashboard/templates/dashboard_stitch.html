@@ -2,119 +2,376 @@
 <html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
-    <title>SJCET Digital Twin – Dashboard</title>
-
-    <!-- Auto refresh every 15 seconds -->
-    <meta http-equiv="refresh" content="15">
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Google Icons -->
+    <title>SJCET Digital Twin - Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
-    <!-- Tailwind Custom Config -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: "#11d442",
-                        bgLight: "#f6f8f6"
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { primary: "#11d442", bgLight: "#f6f8f6" } } } }
     </script>
+    <style>
+        .chart-card { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+        #energyHeatmapMap, #occupancySimulationMap { width: 100%; height: 360px; border-radius: 0.75rem; border: 1px solid #e2e8f0; }
+        .prediction-table-wrap { max-height: 360px; }
+    </style>
 </head>
-
 <body class="bg-bgLight min-h-screen flex">
-
-<!-- SIDEBAR -->
-<aside class="w-64 bg-white border-r">
+<aside class="w-64 bg-white border-r hidden md:block">
     <div class="p-6 flex items-center gap-3">
-        <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-white">
-            <span class="material-icons">lan</span>
-        </div>
+        <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-white"><span class="material-icons">lan</span></div>
         <h2 class="font-bold text-xl">SJCET Twin</h2>
     </div>
 </aside>
 
-<!-- MAIN CONTENT -->
-<main class="flex-1 p-8 overflow-y-auto">
-
-    <!-- HEADER -->
-    <div class="flex justify-between items-start mb-6">
+<main class="flex-1 p-6 md:p-8 overflow-y-auto">
+    <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
         <div>
-            <h1 class="text-3xl font-bold mb-2">
-                Building Occupancy Dashboard
-            </h1>
-
-            <!-- TIME PHASE -->
-            <div class="inline-block px-4 py-2 rounded-full bg-white border text-sm font-semibold text-slate-600">
-                Current Phase:
-                <span class="ml-1 text-primary font-bold">
-                    {{ time_phase }}
-                </span>
+            <h1 class="text-2xl md:text-3xl font-bold mb-2">Campus Operations Dashboard</h1>
+            <div class="inline-block px-4 py-2 rounded-full bg-white border text-sm font-semibold text-slate-600">Current Phase: <span class="ml-1 text-primary font-bold">{{ time_phase }}</span></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button id="manualRefreshBtn" type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border bg-white text-slate-700">Refresh</button>
+            <div class="inline-flex p-1 rounded-xl border bg-white w-fit">
+                <button id="tab-btn-occupancy" type="button" class="px-4 py-2 rounded-lg text-sm font-semibold">Building Occupancy</button>
+                <button id="tab-btn-energy" type="button" class="px-4 py-2 rounded-lg text-sm font-semibold">Energy Consumption</button>
             </div>
-
-            <!-- ACTIVE EVENTS -->
-            {% if active_events %}
-                <div class="mt-3 p-4 rounded-lg border bg-blue-50 border-blue-200">
-                    <div class="text-sm font-semibold text-blue-700 mb-1">
-                        📅 Today’s Active Event(s)
-                    </div>
-                    <ul class="text-sm text-blue-600 space-y-1">
-                        {% for event in active_events %}
-                            <li>
-                                <span class="font-medium">
-                                    {{ event.title }}
-                                </span>
-                                —
-                                <span class="italic">
-                                    {{ event.get_event_type_display }}
-                                </span>
-                                ({{ event.start_time }} - {{ event.end_time }})
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            {% else %}
-                <div class="mt-3 text-sm text-slate-400">
-                    No active events right now.
-                </div>
-            {% endif %}
-
         </div>
     </div>
 
-    <!-- BUILDING CARDS -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-
-        {% for b in buildings %}
-        <div class="bg-white p-5 rounded-xl border">
-
-            <div class="flex justify-between mb-3">
-                <h4 class="font-bold">{{ b.name }}</h4>
-                <span class="px-2 py-1 rounded-full text-[10px] font-bold {{ b.badge_class }}">
-                    {{ b.status }}
-                </span>
-            </div>
-
-            <div class="text-xs font-medium mb-1">
-                {{ b.occupancy }} / {{ b.capacity }}
-            </div>
-
-            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div class="h-full rounded-full {{ b.bar_class }} {{ b.width_class }}"></div>
-            </div>
-
+    <section id="tab-occupancy" class="space-y-6">
+        {% if active_events %}
+        <div class="p-4 rounded-lg border bg-blue-50 border-blue-200">
+            <div class="text-sm font-semibold text-blue-700 mb-1">Today's Active Event(s)</div>
+            <ul class="text-sm text-blue-600 space-y-1">
+                {% for event in active_events %}
+                <li><span class="font-medium">{{ event.title }}</span> <span class="italic">({{ event.get_event_type_display }})</span> <span>{{ event.location_names }}</span> <span>{{ event.start_time }} - {{ event.end_time }}</span></li>
+                {% endfor %}
+            </ul>
         </div>
-        {% endfor %}
+        {% else %}
+        <div class="text-sm text-slate-400">No active events right now.</div>
+        {% endif %}
 
-    </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded-xl border"><p class="text-xs text-slate-500">Current Total Occupancy</p><p id="currentTotalOccupancy" class="text-2xl font-bold mt-1">{{ occupancy_projection.current_total_occupancy }}</p></div>
+            <div class="bg-white p-4 rounded-xl border"><p class="text-xs text-slate-500">Total Capacity</p><p class="text-2xl font-bold mt-1">{{ occupancy_projection.current_total_capacity }}</p></div>
+        </div>
 
+        <div class="chart-card p-5 rounded-xl border border-slate-200">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-600 mb-1">Future Campus Population Growth (%)</h3>
+                    <p class="text-xs text-slate-500">Move the slider to simulate projected student growth and occupancy stress.</p>
+                </div>
+                <div class="text-sm text-slate-600">Growth: <span id="growthValue" class="font-bold text-slate-900">0%</span></div>
+            </div>
+            <div class="mt-4"><input id="populationGrowthSlider" type="range" min="0" max="100" value="0" class="w-full accent-slate-900"></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200"><p class="text-xs text-slate-500">Current Students</p><p id="currentStudents" class="text-xl font-bold mt-1">{{ occupancy_projection.current_students }}</p></div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200"><p class="text-xs text-slate-500">Projected Students</p><p id="projectedStudents" class="text-xl font-bold mt-1">{{ occupancy_projection.current_students }}</p></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {% for b in buildings %}
+            <div class="bg-white p-5 rounded-xl border simulation-building-card" data-building-name="{{ b.name }}">
+                <div class="flex justify-between mb-3 gap-2 items-start">
+                    <h4 class="font-bold">{{ b.name }}</h4>
+                    <span class="px-2 py-1 rounded-full text-[10px] font-bold building-status {{ b.badge_class }}">{{ b.status }}</span>
+                </div>
+                <div class="text-xs font-medium mb-1 building-occupancy-text">{{ b.occupancy }} / {{ b.capacity }}</div>
+                <div class="text-[11px] text-slate-500 mb-2 building-occupancy-percent">{{ b.occupancy_percent }}% utilized</div>
+                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="h-full rounded-full {{ b.bar_class }} occupancy-progress-fill" data-width="{{ b.occupancy_percent }}"></div></div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="chart-card p-5 rounded-xl border border-slate-200">
+                <div class="flex items-center justify-between mb-3 gap-3">
+                    <h3 class="text-sm font-semibold text-slate-600">Campus Occupancy Heatmap</h3>
+                    <span class="text-xs text-slate-500">Green to red markers reflect simulated occupancy</span>
+                </div>
+                <div id="occupancySimulationMap"></div>
+            </div>
+            <div class="space-y-6">
+                <div class="chart-card p-5 rounded-xl border border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-600 mb-3">Infrastructure Stress Indicators</h3>
+                    <div id="stressAlerts" class="space-y-2 text-sm text-slate-600"><div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">No building is currently near its safe occupancy threshold.</div></div>
+                </div>
+                <div class="chart-card p-5 rounded-xl border border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-600 mb-3">Smart Campus Advisor</h3>
+                    <div id="advisorRecommendations" class="space-y-2 text-sm text-slate-600"><div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Campus operating within safe limits. No infrastructure stress detected.</div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tab-energy" class="space-y-6 hidden">
+        {% if energy_payload.has_data %}
+        <div class="chart-card p-5 rounded-xl border border-slate-200">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-600 mb-1">Energy Consumption Simulation (%)</h3>
+                    <p class="text-xs text-slate-500">Use the slider to simulate higher campus-wide energy demand from the ML prediction baseline.</p>
+                </div>
+                <div class="text-sm text-slate-600">Energy Increase: <span id="energySliderValue" class="font-bold text-slate-900">0%</span></div>
+            </div>
+            <div class="mt-4"><input id="energySimulationSlider" type="range" min="0" max="100" value="0" class="w-full accent-slate-900"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded-xl border"><p class="text-xs text-slate-500">Current Energy Demand</p><p id="currentEnergyDemand" class="text-2xl font-bold mt-1">{{ energy_payload.current_energy_demand }}</p></div>
+            <div class="bg-white p-4 rounded-xl border"><p class="text-xs text-slate-500">Projected Energy Demand</p><p id="projectedEnergyDemand" class="text-2xl font-bold mt-1">{{ energy_payload.current_energy_demand }}</p></div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="chart-card p-5 rounded-xl border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-slate-600">Energy Consumption Heatmap</h3>
+                    <span class="text-xs text-slate-500">Prediction Year: {{ energy_payload.building_predictions_year }}</span>
+                </div>
+                <div id="energyHeatmapMap"></div>
+                <p class="text-xs text-slate-500 mt-2">Green = Low, Yellow = Medium, Red = High predicted energy usage.</p>
+            </div>
+            <div class="chart-card p-5 rounded-xl border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-slate-600">Building Energy Predictions</h3>
+                    <span class="text-xs text-slate-500">Total Campus: {{ energy_payload.total_campus_energy }} kWh</span>
+                </div>
+                <div class="prediction-table-wrap overflow-y-auto rounded-lg border border-slate-200">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 sticky top-0"><tr class="text-left text-slate-600"><th class="px-3 py-2">Building</th><th class="px-3 py-2">Predicted kWh</th><th class="px-3 py-2">Simulated kWh</th></tr></thead>
+                        <tbody>
+                            {% for item in energy_payload.building_predictions %}
+                            <tr class="border-t border-slate-100 energy-building-row" data-building-name="{{ item.building }}">
+                                <td class="px-3 py-2">{{ item.building }}</td>
+                                <td class="px-3 py-2 font-semibold">{{ item.predicted_kwh }}</td>
+                                <td class="px-3 py-2 font-semibold simulated-energy-cell">{{ item.predicted_kwh }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-white p-5 rounded-xl border text-sm text-slate-500">No college-level energy records available yet. Add COLLEGE scope entries in admin to train and predict.</div>
+        {% endif %}
+    </section>
 </main>
 
+{{ occupancy_projection|json_script:"occupancy-projection" }}
+{{ energy_payload|json_script:"energy-payload" }}
+{{ simulation_buildings|json_script:"simulation-buildings" }}
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<script>
+// @ts-nocheck
+const occupancyProjection = JSON.parse(document.getElementById("occupancy-projection").textContent);
+const energyPayload = JSON.parse(document.getElementById("energy-payload").textContent);
+const simulationBuildings = JSON.parse(document.getElementById("simulation-buildings").textContent);
+
+function formatNumber(value) { return Number(value || 0).toFixed(1).replace(/\.0$/, ""); }
+function getOccupancyColor(percent) { if (percent <= 30) return "#22c55e"; if (percent <= 60) return "#facc15"; if (percent <= 80) return "#f97316"; return "#ef4444"; }
+function getSimulationStatus(percent) { if (percent === 0) return { label: "Empty", badgeClass: "bg-slate-200 text-slate-600", barClass: "bg-slate-400" }; if (percent >= 80) return { label: "Crowded", badgeClass: "bg-red-100 text-red-700", barClass: "bg-red-500" }; return { label: "Normal", badgeClass: "bg-green-100 text-green-700", barClass: "bg-green-500" }; }
+function getEnergyColor(value, low, high) { if (value <= low) return "#22c55e"; if (value <= high) return "#facc15"; return "#ef4444"; }
+
+document.querySelectorAll(".occupancy-progress-fill").forEach((el) => {
+    const width = Number(el.dataset.width || 0);
+    el.style.width = `${Math.max(0, Math.min(100, width))}%`;
+});
+
+document.getElementById("manualRefreshBtn").addEventListener("click", () => window.location.reload());
+
+const occupancyBtn = document.getElementById("tab-btn-occupancy");
+const energyBtn = document.getElementById("tab-btn-energy");
+const occupancyTab = document.getElementById("tab-occupancy");
+const energyTab = document.getElementById("tab-energy");
+function renderTabs(active) {
+    const isOccupancy = active === "occupancy";
+    occupancyTab.classList.toggle("hidden", !isOccupancy);
+    energyTab.classList.toggle("hidden", isOccupancy);
+    occupancyBtn.className = isOccupancy ? "px-4 py-2 rounded-lg text-sm font-semibold bg-slate-900 text-white" : "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600";
+    energyBtn.className = !isOccupancy ? "px-4 py-2 rounded-lg text-sm font-semibold bg-slate-900 text-white" : "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600";
+}
+renderTabs(localStorage.getItem("dashboardActiveTab") || "occupancy");
+occupancyBtn.addEventListener("click", () => { localStorage.setItem("dashboardActiveTab", "occupancy"); renderTabs("occupancy"); });
+energyBtn.addEventListener("click", () => { localStorage.setItem("dashboardActiveTab", "energy"); renderTabs("energy"); });
+
+let occupancySimulationMap = null;
+let occupancyLayer = null;
+let energyHeatmapMap = null;
+let energyHeatmapLayer = null;
+
+function ensureOccupancyMap() {
+    if (occupancySimulationMap || typeof L === "undefined" || !document.getElementById("occupancySimulationMap")) return;
+    occupancySimulationMap = L.map("occupancySimulationMap", { zoomControl: true, scrollWheelZoom: false }).setView([9.7270, 76.7260], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap" }).addTo(occupancySimulationMap);
+}
+
+function ensureEnergyMap() {
+    if (energyHeatmapMap || typeof L === "undefined" || !document.getElementById("energyHeatmapMap")) return;
+    energyHeatmapMap = L.map("energyHeatmapMap", { zoomControl: true, scrollWheelZoom: false }).setView([9.7270, 76.7260], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap" }).addTo(energyHeatmapMap);
+}
+
+function renderMessages(messages, container, emptyMessage, className) {
+    container.innerHTML = "";
+    const items = messages.length ? messages : [emptyMessage];
+    items.forEach((message) => {
+        const item = document.createElement("div");
+        item.className = messages.length ? className : "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2";
+        item.textContent = message;
+        container.appendChild(item);
+    });
+}
+
+function buildSimulationState(populationPercent, energyPercent) {
+    const populationGrowth = populationPercent / 100;
+    const energyGrowth = energyPercent / 100;
+    const currentStudents = Number(occupancyProjection.current_students || 0);
+    const currentEnergyDemand = Number(energyPayload.current_energy_demand || 0);
+    const projectedEnergyDemand = currentEnergyDemand * (1 + energyGrowth);
+    const simulatedBuildings = simulationBuildings.map((building) => {
+        const capacity = Number(building.capacity || 0);
+        const rawFutureOccupancy = Number(building.current_occupancy || 0) * (1 + populationGrowth);
+        const futureOccupancy = Math.min(capacity, rawFutureOccupancy);
+        const futureOccupancyPercent = capacity ? (futureOccupancy / capacity) * 100 : 0;
+        const simulatedEnergy = Number(building.predicted_energy || 0) * (1 + energyGrowth);
+        return {
+            ...building,
+            raw_future_occupancy: Number(rawFutureOccupancy.toFixed(1)),
+            future_occupancy: Number(futureOccupancy.toFixed(1)),
+            future_occupancy_percent: Number(futureOccupancyPercent.toFixed(1)),
+            future_energy: Number(simulatedEnergy.toFixed(2)),
+            simulation_status: getSimulationStatus(futureOccupancyPercent),
+        };
+    });
+    const totalFutureOccupancy = simulatedBuildings.reduce((sum, building) => sum + building.future_occupancy, 0);
+    return {
+        populationPercent,
+        energyPercent,
+        currentStudents,
+        projectedStudents: currentStudents * (1 + populationGrowth),
+        currentEnergyDemand,
+        projectedEnergyDemand,
+        totalFutureOccupancy,
+        simulatedBuildings,
+    };
+}
+
+function renderOccupancyMap(buildings) {
+    ensureOccupancyMap();
+    if (!occupancySimulationMap) return;
+    if (occupancyLayer) occupancySimulationMap.removeLayer(occupancyLayer);
+    const markers = [];
+    const bounds = [];
+    buildings.forEach((building) => {
+        if (building.latitude == null || building.longitude == null) return;
+        const marker = L.circleMarker([building.latitude, building.longitude], {
+            radius: 8,
+            color: "#0f172a",
+            weight: 1,
+            fillColor: getOccupancyColor(building.future_occupancy_percent),
+            fillOpacity: 0.95,
+        }).bindTooltip(`${building.name}<br>Predicted Occupancy: ${formatNumber(building.future_occupancy_percent)}%<br>Predicted Energy Consumption: ${formatNumber(building.future_energy)} kWh`);
+        markers.push(marker);
+        bounds.push([building.latitude, building.longitude]);
+    });
+    occupancyLayer = L.layerGroup(markers).addTo(occupancySimulationMap);
+    if (bounds.length) occupancySimulationMap.fitBounds(bounds, { padding: [24, 24] });
+}
+
+function renderEnergyMap(buildings) {
+    ensureEnergyMap();
+    if (!energyHeatmapMap) return;
+    if (energyHeatmapLayer) energyHeatmapMap.removeLayer(energyHeatmapLayer);
+    const energies = buildings.map((building) => building.future_energy).sort((a, b) => a - b);
+    const low = energies[Math.floor(energies.length * 0.33)] || 0;
+    const high = energies[Math.floor(energies.length * 0.66)] || 0;
+    const markers = [];
+    buildings.forEach((building) => {
+        if (building.latitude == null || building.longitude == null) return;
+        markers.push(
+            L.circleMarker([building.latitude, building.longitude], {
+                radius: 7,
+                color: "#0f172a",
+                weight: 1,
+                fillColor: getEnergyColor(building.future_energy, low, high),
+                fillOpacity: 1,
+            }).bindPopup(`${building.name}<br>Predicted Energy: ${formatNumber(building.future_energy)} kWh`)
+        );
+    });
+    energyHeatmapLayer = L.layerGroup(markers).addTo(energyHeatmapMap);
+}
+
+function updateSimulation() {
+    const populationPercent = Number(populationSlider ? populationSlider.value : 0);
+    const energyPercent = Number(energySlider ? energySlider.value : 0);
+    const state = buildSimulationState(populationPercent, energyPercent);
+
+    document.getElementById("growthValue").textContent = `${state.populationPercent}%`;
+    document.getElementById("currentStudents").textContent = formatNumber(state.currentStudents);
+    document.getElementById("projectedStudents").textContent = formatNumber(state.projectedStudents);
+    document.getElementById("currentTotalOccupancy").textContent = formatNumber(state.totalFutureOccupancy);
+    document.getElementById("energySliderValue").textContent = `${state.energyPercent}%`;
+    document.getElementById("currentEnergyDemand").textContent = formatNumber(state.currentEnergyDemand);
+    document.getElementById("projectedEnergyDemand").textContent = formatNumber(state.projectedEnergyDemand);
+
+    document.querySelectorAll(".simulation-building-card").forEach((card) => {
+        const building = state.simulatedBuildings.find((item) => item.name === card.dataset.buildingName);
+        if (!building) return;
+        card.querySelector(".building-status").className = `px-2 py-1 rounded-full text-[10px] font-bold building-status ${building.simulation_status.badgeClass}`;
+        card.querySelector(".building-status").textContent = building.simulation_status.label;
+        card.querySelector(".building-occupancy-text").textContent = `${formatNumber(building.future_occupancy)} / ${building.capacity}`;
+        card.querySelector(".building-occupancy-percent").textContent = `${formatNumber(building.future_occupancy_percent)}% utilized`;
+        const progress = card.querySelector(".occupancy-progress-fill");
+        progress.className = `h-full rounded-full occupancy-progress-fill ${building.simulation_status.barClass}`;
+        progress.style.width = `${Math.max(0, Math.min(100, building.future_occupancy_percent))}%`;
+    });
+
+    document.querySelectorAll(".energy-building-row").forEach((row) => {
+        const building = state.simulatedBuildings.find((item) => item.name === row.dataset.buildingName);
+        if (building) row.querySelector(".simulated-energy-cell").textContent = formatNumber(building.future_energy);
+    });
+
+    const alerts = [];
+    const recommendations = [];
+    state.simulatedBuildings.forEach((building) => {
+        if (building.capacity && building.raw_future_occupancy > building.capacity) {
+            alerts.push(`${building.name} critical occupancy overload`);
+            recommendations.push(`Critical warning: ${building.name} is projected to exceed capacity.`);
+        } else if (building.capacity && building.raw_future_occupancy > building.capacity * 0.9) {
+            alerts.push(`${building.name} nearing infrastructure stress`);
+            recommendations.push(`Warning: ${building.name} is projected above 90% capacity.`);
+        }
+        if (/Food Court|Canteen|Dining/i.test(building.name) && building.capacity && building.raw_future_occupancy > building.capacity * 0.9) {
+            recommendations.push("Increase dining facilities.");
+        }
+        if (/Hostel/i.test(building.name) && building.capacity && building.raw_future_occupancy > building.capacity * 0.9) {
+            recommendations.push("Expand hostel capacity.");
+        }
+        if (/Academic|Block|Library/i.test(building.name) && building.capacity && building.raw_future_occupancy > building.capacity * 0.9) {
+            recommendations.push("Construct additional academic blocks.");
+        }
+    });
+    if (recommendations.length) {
+        recommendations.push("Introduce staggered class schedules.");
+        recommendations.push("Improve campus infrastructure.");
+    }
+    renderMessages(alerts, document.getElementById("stressAlerts"), "No building is currently near its safe occupancy threshold.", "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2");
+    renderMessages([...new Set(recommendations)], document.getElementById("advisorRecommendations"), "Campus operating within safe limits.", "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2");
+
+    renderOccupancyMap(state.simulatedBuildings);
+    renderEnergyMap(state.simulatedBuildings);
+}
+
+const populationSlider = document.getElementById("populationGrowthSlider");
+const energySlider = document.getElementById("energySimulationSlider");
+
+if (populationSlider) populationSlider.addEventListener("input", updateSimulation);
+if (energySlider) energySlider.addEventListener("input", updateSimulation);
+updateSimulation();
+</script>
 </body>
 </html>
