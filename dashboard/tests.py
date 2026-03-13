@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -268,3 +269,111 @@ class HeatmapAlertTests(TestCase):
 
         self.assertTrue(building_predictions["Hostel"]["study_leave_alert"])
         self.assertFalse(building_predictions["Block A"]["study_leave_alert"])
+
+
+class CustomAdminTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.staff_user = self.user_model.objects.create_user(
+            username="adminuser",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = self.user_model.objects.create_user(
+            username="regularuser",
+            password="testpass123",
+        )
+        self.building = Building.objects.create(name="Admin Block", building_type="ADMIN", capacity=50)
+
+    def test_home_secure_login_points_to_custom_login(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertContains(response, reverse("admin_login"))
+        self.assertNotContains(response, 'href="/admin/"')
+        self.assertNotContains(response, "Enter Dashboard")
+        self.assertNotContains(response, "Campus Overview")
+
+    def test_custom_admin_login_redirects_staff_to_dashboard(self):
+        response = self.client.post(
+            reverse("admin_login"),
+            {"username": "adminuser", "password": "testpass123"},
+        )
+
+        self.assertRedirects(response, reverse("admin_dashboard"))
+
+    def test_custom_admin_login_rejects_non_staff_users(self):
+        response = self.client.post(
+            reverse("admin_login"),
+            {"username": "regularuser", "password": "testpass123"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Only staff accounts can access the admin dashboard.")
+
+    def test_manage_data_page_requires_staff_access(self):
+        response = self.client.get(reverse("admin_manage_data"))
+
+        self.assertRedirects(response, f"{reverse('admin_login')}?next={reverse('admin_manage_data')}")
+
+    def test_staff_can_create_energy_record_from_custom_admin(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(
+            reverse("admin_model_create", kwargs={"model_key": "energyconsumption"}),
+            {
+                "scope": "BUILDING",
+                "building": self.building.id,
+                "year": 2026,
+                "month": 2,
+                "energy_consumed_kwh": 1234.5,
+                "peak_demand_kw": 54.2,
+                "notes": "Seeded from custom admin",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("admin_model_list", kwargs={"model_key": "energyconsumption"}),
+        )
+        self.assertTrue(
+            EnergyConsumption.objects.filter(
+                building=self.building,
+                year=2026,
+                month=2,
+                energy_consumed_kwh=1234.5,
+            ).exists()
+        )
+
+    def test_occupancy_module_shows_dashboard_content(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(reverse("admin_occupancy"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Building Occupancy")
+        self.assertContains(response, "Current Total Occupancy")
+        self.assertContains(response, "Manage Occupancy Data")
+
+    def test_energy_module_shows_dashboard_content(self):
+        EnergyConsumption.objects.create(
+            scope="BUILDING",
+            building=self.building,
+            year=2025,
+            month=1,
+            energy_consumed_kwh=400,
+        )
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(reverse("admin_energy"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Energy Consumption")
+        self.assertContains(response, "Current Energy Demand")
+        self.assertContains(response, "Manage Energy Data")
+
+    def test_legacy_dashboard_route_redirects_to_admin_dashboard(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(reverse("dashboard_ui"))
+
+        self.assertRedirects(response, reverse("admin_dashboard"))

@@ -1,0 +1,222 @@
+{% extends "admin_base.html" %}
+
+{% block content %}
+<section class="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/70 bg-white/80 p-8 shadow-panel backdrop-blur-md lg:flex-row lg:items-end lg:justify-between">
+    <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Admin Module</p>
+        <h1 class="mt-2 text-4xl font-extrabold text-forest-green">Building Occupancy</h1>
+        <p class="mt-4 max-w-3xl text-base leading-7 text-slate-600">The occupancy simulation and live building load view now live here inside the secure custom admin.</p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+        <button id="manualRefreshBtn" type="button" class="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Refresh</button>
+        <a href="{{ manage_href }}" class="rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary/90">Manage Occupancy Data</a>
+    </div>
+</section>
+
+<section class="space-y-6">
+    <div class="inline-block rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600">Current Phase: <span class="ml-1 font-bold text-primary">{{ time_phase }}</span></div>
+
+    {% if active_events %}
+    <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+        <div class="mb-1 text-sm font-semibold text-blue-700">Today's Active Event(s)</div>
+        <ul class="space-y-1 text-sm text-blue-600">
+            {% for event in active_events %}
+            <li><span class="font-medium">{{ event.title }}</span> <span class="italic">({{ event.get_event_type_display }})</span> <span>{{ event.location_names }}</span> <span>{{ event.start_time }} - {{ event.end_time }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="text-sm text-slate-400">No active events right now.</div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Current Total Occupancy</p><p id="currentTotalOccupancy" class="mt-1 text-2xl font-bold">{{ occupancy_projection.current_total_occupancy }}</p></div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Total Capacity</p><p class="mt-1 text-2xl font-bold">{{ occupancy_projection.current_total_capacity }}</p></div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h3 class="mb-1 text-sm font-semibold text-slate-600">Future Campus Population Growth (%)</h3>
+                <p class="text-xs text-slate-500">Move the slider to simulate projected student growth and occupancy stress.</p>
+            </div>
+            <div class="text-sm text-slate-600">Growth: <span id="growthValue" class="font-bold text-slate-900">0%</span></div>
+        </div>
+        <div class="mt-4"><input id="populationGrowthSlider" type="range" min="0" max="100" value="0" class="w-full accent-slate-900"></div>
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p class="text-xs text-slate-500">Current Students</p><p id="currentStudents" class="mt-1 text-xl font-bold">{{ occupancy_projection.current_students }}</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p class="text-xs text-slate-500">Projected Students</p><p id="projectedStudents" class="mt-1 text-xl font-bold">{{ occupancy_projection.current_students }}</p></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {% for b in buildings %}
+        <div class="simulation-building-card rounded-2xl border border-slate-200 bg-white p-5" data-building-name="{{ b.name }}">
+            <div class="mb-3 flex items-start justify-between gap-2">
+                <h4 class="font-bold">{{ b.name }}</h4>
+                <span class="building-status rounded-full px-2 py-1 text-[10px] font-bold {{ b.badge_class }}">{{ b.status }}</span>
+            </div>
+            <div class="building-occupancy-text mb-1 text-xs font-medium">{{ b.occupancy }} / {{ b.capacity }}</div>
+            <div class="building-occupancy-percent mb-2 text-[11px] text-slate-500">{{ b.occupancy_percent }}% utilized</div>
+            <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100"><div class="occupancy-progress-fill h-full rounded-full {{ b.bar_class }}" data-width="{{ b.occupancy_percent }}"></div></div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-slate-600">Campus Occupancy Heatmap</h3>
+                <span class="text-xs text-slate-500">Green to red markers reflect simulated occupancy</span>
+            </div>
+            <div id="occupancySimulationMap" class="h-[360px] w-full rounded-xl border border-slate-200"></div>
+        </div>
+        <div class="space-y-6">
+            <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+                <h3 class="mb-3 text-sm font-semibold text-slate-600">Infrastructure Stress Indicators</h3>
+                <div id="stressAlerts" class="space-y-2 text-sm text-slate-600"><div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">No building is currently near its safe occupancy threshold.</div></div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+                <h3 class="mb-3 text-sm font-semibold text-slate-600">Smart Campus Advisor</h3>
+                <div id="advisorRecommendations" class="space-y-2 text-sm text-slate-600"><div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Campus operating within safe limits. No infrastructure stress detected.</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{{ occupancy_projection|json_script:"occupancy-projection" }}
+{{ energy_payload|json_script:"energy-payload" }}
+{{ simulation_buildings|json_script:"simulation-buildings" }}
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const occupancyProjection = JSON.parse(document.getElementById("occupancy-projection").textContent);
+const energyPayload = JSON.parse(document.getElementById("energy-payload").textContent);
+const simulationBuildings = JSON.parse(document.getElementById("simulation-buildings").textContent);
+
+function formatNumber(value) { return Number(value || 0).toFixed(1).replace(/\.0$/, ""); }
+function getOccupancyColor(percent) { if (percent <= 30) return "#22c55e"; if (percent <= 60) return "#facc15"; if (percent <= 80) return "#f97316"; return "#ef4444"; }
+function getSimulationStatus(percent) { if (percent === 0) return { label: "Empty", badgeClass: "bg-slate-200 text-slate-600", barClass: "bg-slate-400" }; if (percent >= 80) return { label: "Crowded", badgeClass: "bg-red-100 text-red-700", barClass: "bg-red-500" }; return { label: "Normal", badgeClass: "bg-green-100 text-green-700", barClass: "bg-green-500" }; }
+
+document.querySelectorAll(".occupancy-progress-fill").forEach((el) => {
+    const width = Number(el.dataset.width || 0);
+    el.style.width = `${Math.max(0, Math.min(100, width))}%`;
+});
+
+document.getElementById("manualRefreshBtn").addEventListener("click", () => window.location.reload());
+
+let occupancySimulationMap = null;
+let occupancyLayer = null;
+
+function ensureOccupancyMap() {
+    if (occupancySimulationMap || typeof L === "undefined" || !document.getElementById("occupancySimulationMap")) return;
+    occupancySimulationMap = L.map("occupancySimulationMap", { zoomControl: true, scrollWheelZoom: false }).setView([9.7270, 76.7260], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap" }).addTo(occupancySimulationMap);
+}
+
+function renderMessages(messages, container, emptyMessage, className) {
+    container.innerHTML = "";
+    const items = messages.length ? messages : [emptyMessage];
+    items.forEach((message) => {
+        const item = document.createElement("div");
+        item.className = messages.length ? className : "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2";
+        item.textContent = message;
+        container.appendChild(item);
+    });
+}
+
+function buildSimulationState(populationPercent) {
+    const populationGrowth = populationPercent / 100;
+    const currentStudents = Number(occupancyProjection.current_students || 0);
+    const simulatedBuildings = simulationBuildings.map((building) => {
+        const capacity = Number(building.capacity || 0);
+        const rawFutureOccupancy = Number(building.current_occupancy || 0) * (1 + populationGrowth);
+        const futureOccupancy = Math.min(capacity, rawFutureOccupancy);
+        const futureOccupancyPercent = capacity ? (futureOccupancy / capacity) * 100 : 0;
+        return {
+            ...building,
+            raw_future_occupancy: Number(rawFutureOccupancy.toFixed(1)),
+            future_occupancy: Number(futureOccupancy.toFixed(1)),
+            future_occupancy_percent: Number(futureOccupancyPercent.toFixed(1)),
+            simulation_status: getSimulationStatus(futureOccupancyPercent),
+        };
+    });
+    const totalFutureOccupancy = simulatedBuildings.reduce((sum, building) => sum + building.future_occupancy, 0);
+    return {
+        populationPercent,
+        currentStudents,
+        projectedStudents: currentStudents * (1 + populationGrowth),
+        totalFutureOccupancy,
+        simulatedBuildings,
+    };
+}
+
+function renderOccupancyMap(buildings) {
+    ensureOccupancyMap();
+    if (!occupancySimulationMap) return;
+    if (occupancyLayer) occupancySimulationMap.removeLayer(occupancyLayer);
+    const markers = [];
+    const bounds = [];
+    buildings.forEach((building) => {
+        if (building.latitude == null || building.longitude == null) return;
+        const marker = L.circleMarker([building.latitude, building.longitude], {
+            radius: 8,
+            color: "#0f172a",
+            weight: 1,
+            fillColor: getOccupancyColor(building.future_occupancy_percent),
+            fillOpacity: 0.95,
+        }).bindTooltip(`${building.name}<br>Predicted Occupancy: ${formatNumber(building.future_occupancy_percent)}%<br>Predicted Energy Consumption: ${formatNumber(building.predicted_energy)} kWh`);
+        markers.push(marker);
+        bounds.push([building.latitude, building.longitude]);
+    });
+    occupancyLayer = L.layerGroup(markers).addTo(occupancySimulationMap);
+    if (bounds.length) occupancySimulationMap.fitBounds(bounds, { padding: [24, 24] });
+}
+
+function updateSimulation() {
+    const populationPercent = Number(populationSlider.value || 0);
+    const state = buildSimulationState(populationPercent);
+
+    document.getElementById("growthValue").textContent = `${state.populationPercent}%`;
+    document.getElementById("currentStudents").textContent = formatNumber(state.currentStudents);
+    document.getElementById("projectedStudents").textContent = formatNumber(state.projectedStudents);
+    document.getElementById("currentTotalOccupancy").textContent = formatNumber(state.totalFutureOccupancy);
+
+    document.querySelectorAll(".simulation-building-card").forEach((card) => {
+        const building = state.simulatedBuildings.find((item) => item.name === card.dataset.buildingName);
+        if (!building) return;
+        card.querySelector(".building-status").className = `building-status rounded-full px-2 py-1 text-[10px] font-bold ${building.simulation_status.badgeClass}`;
+        card.querySelector(".building-status").textContent = building.simulation_status.label;
+        card.querySelector(".building-occupancy-text").textContent = `${formatNumber(building.future_occupancy)} / ${building.capacity}`;
+        card.querySelector(".building-occupancy-percent").textContent = `${formatNumber(building.future_occupancy_percent)}% utilized`;
+        const progress = card.querySelector(".occupancy-progress-fill");
+        progress.className = `occupancy-progress-fill h-full rounded-full ${building.simulation_status.barClass}`;
+        progress.style.width = `${Math.max(0, Math.min(100, building.future_occupancy_percent))}%`;
+    });
+
+    const alerts = [];
+    const recommendations = [];
+    state.simulatedBuildings.forEach((building) => {
+        if (building.capacity && building.raw_future_occupancy > building.capacity) {
+            alerts.push(`${building.name} critical occupancy overload`);
+            recommendations.push(`Critical warning: ${building.name} is projected to exceed capacity.`);
+        } else if (building.capacity && building.raw_future_occupancy > building.capacity * 0.9) {
+            alerts.push(`${building.name} nearing infrastructure stress`);
+            recommendations.push(`Warning: ${building.name} is projected above 90% capacity.`);
+        }
+    });
+    if (recommendations.length) {
+        recommendations.push("Introduce staggered class schedules.");
+        recommendations.push("Improve campus infrastructure.");
+    }
+    renderMessages(alerts, document.getElementById("stressAlerts"), "No building is currently near its safe occupancy threshold.", "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2");
+    renderMessages([...new Set(recommendations)], document.getElementById("advisorRecommendations"), "Campus operating within safe limits.", "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2");
+
+    renderOccupancyMap(state.simulatedBuildings);
+}
+
+const populationSlider = document.getElementById("populationGrowthSlider");
+populationSlider.addEventListener("input", updateSimulation);
+updateSimulation();
+</script>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>{{ page_title }} | SJCET Digital Twin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<script>
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                primary: "#11d442",
+                "background-light": "#f6f8f6",
+                "background-dark": "#102215",
+                "forest-green": "#0a4a1a",
+                "sage-green": "#e7f3e9",
+                "warm-neutral": "#f5f5f0"
+            },
+            fontFamily: {
+                display: ["Inter", "sans-serif"]
+            },
+            boxShadow: {
+                panel: "0 20px 45px rgba(15, 23, 42, 0.08)"
+            }
+        }
+    }
+}
+</script>
+<style>
+body {
+    font-family: "Inter", sans-serif;
+}
+</style>
+</head>
+<body class="min-h-screen bg-background-light font-display text-slate-800">
+<div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(17,212,66,0.15),_transparent_26%),linear-gradient(135deg,_#edf6f0_0%,_#f7faf8_48%,_#eef4f2_100%)]">
+    <header class="sticky top-0 z-40 border-b border-forest-green/10 bg-white/85 backdrop-blur-md">
+        <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
+            <a href="{% url 'admin_dashboard' %}" class="flex items-center gap-3">
+                <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
+                    <span class="material-icons">admin_panel_settings</span>
+                </div>
+                <div>
+                    <p class="text-lg font-bold leading-none text-forest-green">SJCET</p>
+                    <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-500">Admin</p>
+                </div>
+            </a>
+            <nav class="hidden items-center gap-3 text-sm font-medium text-slate-600 md:flex">
+                <a class="rounded-full px-4 py-2 transition hover:bg-sage-green hover:text-forest-green" href="{% url 'admin_dashboard' %}">Dashboard</a>
+                <a class="rounded-full px-4 py-2 transition hover:bg-sage-green hover:text-forest-green" href="{% url 'admin_occupancy' %}">Occupancy</a>
+                <a class="rounded-full px-4 py-2 transition hover:bg-sage-green hover:text-forest-green" href="{% url 'admin_energy' %}">Energy</a>
+                <a class="rounded-full px-4 py-2 transition hover:bg-sage-green hover:text-forest-green" href="{% url 'admin_manage_data' %}">Manage Data</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                {% if request.user.is_authenticated %}
+                <span class="hidden rounded-full bg-sage-green px-4 py-2 text-sm font-semibold text-forest-green md:inline-flex">{{ request.user.username }}</span>
+                <form action="{% url 'admin_logout' %}" method="post">
+                    {% csrf_token %}
+                    <button class="rounded-full bg-forest-green px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest-green/90" type="submit">
+                        Log Out
+                    </button>
+                </form>
+                {% else %}
+                <a class="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90" href="{% url 'admin_login' %}">Sign In</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-6 py-8 md:py-12">
+        {% if messages %}
+        <div class="mb-6 space-y-3">
+            {% for message in messages %}
+            <div class="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm shadow-sm">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

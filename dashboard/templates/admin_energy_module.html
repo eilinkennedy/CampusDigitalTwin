@@ -1,0 +1,152 @@
+{% extends "admin_base.html" %}
+
+{% block content %}
+<section class="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/70 bg-white/80 p-8 shadow-panel backdrop-blur-md lg:flex-row lg:items-end lg:justify-between">
+    <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Admin Module</p>
+        <h1 class="mt-2 text-4xl font-extrabold text-forest-green">Energy Consumption</h1>
+        <p class="mt-4 max-w-3xl text-base leading-7 text-slate-600">The campus energy simulation and prediction view now live here inside the secure custom admin.</p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+        <button id="manualRefreshBtn" type="button" class="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary">Refresh</button>
+        <a href="{{ manage_href }}" class="rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary/90">Manage Energy Data</a>
+    </div>
+</section>
+
+<section class="space-y-6">
+    {% if energy_payload.has_data %}
+    <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h3 class="mb-1 text-sm font-semibold text-slate-600">Energy Consumption Simulation (%)</h3>
+                <p class="text-xs text-slate-500">Use the slider to simulate higher campus-wide energy demand from the ML prediction baseline.</p>
+            </div>
+            <div class="text-sm text-slate-600">Energy Increase: <span id="energySliderValue" class="font-bold text-slate-900">0%</span></div>
+        </div>
+        <div class="mt-4"><input id="energySimulationSlider" type="range" min="0" max="100" value="0" class="w-full accent-slate-900"></div>
+    </div>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Current Energy Demand</p><p id="currentEnergyDemand" class="mt-1 text-2xl font-bold">{{ energy_payload.current_energy_demand }}</p></div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Projected Energy Demand</p><p id="projectedEnergyDemand" class="mt-1 text-2xl font-bold">{{ energy_payload.current_energy_demand }}</p></div>
+    </div>
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-slate-600">Energy Consumption Heatmap</h3>
+                <span class="text-xs text-slate-500">Prediction Year: {{ energy_payload.building_predictions_year }}</span>
+            </div>
+            <div id="energyHeatmapMap" class="h-[360px] w-full rounded-xl border border-slate-200"></div>
+            <p class="mt-2 text-xs text-slate-500">Green = Low, Yellow = Medium, Red = High predicted energy usage.</p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-slate-600">Building Energy Predictions</h3>
+                <span class="text-xs text-slate-500">Total Campus: {{ energy_payload.total_campus_energy }} kWh</span>
+            </div>
+            <div class="max-h-[360px] overflow-y-auto rounded-lg border border-slate-200">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-slate-50"><tr class="text-left text-slate-600"><th class="px-3 py-2">Building</th><th class="px-3 py-2">Predicted kWh</th><th class="px-3 py-2">Simulated kWh</th></tr></thead>
+                    <tbody>
+                        {% for item in energy_payload.building_predictions %}
+                        <tr class="energy-building-row border-t border-slate-100" data-building-name="{{ item.building }}">
+                            <td class="px-3 py-2">{{ item.building }}</td>
+                            <td class="px-3 py-2 font-semibold">{{ item.predicted_kwh }}</td>
+                            <td class="simulated-energy-cell px-3 py-2 font-semibold">{{ item.predicted_kwh }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">No college-level energy records available yet. Add COLLEGE scope entries in the custom Manage Data workspace to train and predict.</div>
+    {% endif %}
+</section>
+
+{{ energy_payload|json_script:"energy-payload" }}
+{{ simulation_buildings|json_script:"simulation-buildings" }}
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const energyPayload = JSON.parse(document.getElementById("energy-payload").textContent);
+const simulationBuildings = JSON.parse(document.getElementById("simulation-buildings").textContent);
+
+function formatNumber(value) { return Number(value || 0).toFixed(1).replace(/\.0$/, ""); }
+function getEnergyColor(value, low, high) { if (value <= low) return "#22c55e"; if (value <= high) return "#facc15"; return "#ef4444"; }
+
+document.getElementById("manualRefreshBtn").addEventListener("click", () => window.location.reload());
+
+let energyHeatmapMap = null;
+let energyHeatmapLayer = null;
+
+function ensureEnergyMap() {
+    if (energyHeatmapMap || typeof L === "undefined" || !document.getElementById("energyHeatmapMap")) return;
+    energyHeatmapMap = L.map("energyHeatmapMap", { zoomControl: true, scrollWheelZoom: false }).setView([9.7270, 76.7260], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap" }).addTo(energyHeatmapMap);
+}
+
+function buildSimulationState(energyPercent) {
+    const energyGrowth = energyPercent / 100;
+    const currentEnergyDemand = Number(energyPayload.current_energy_demand || 0);
+    const projectedEnergyDemand = currentEnergyDemand * (1 + energyGrowth);
+    const simulatedBuildings = simulationBuildings.map((building) => ({
+        ...building,
+        future_energy: Number((Number(building.predicted_energy || 0) * (1 + energyGrowth)).toFixed(2)),
+    }));
+    return {
+        energyPercent,
+        currentEnergyDemand,
+        projectedEnergyDemand,
+        simulatedBuildings,
+    };
+}
+
+function renderEnergyMap(buildings) {
+    ensureEnergyMap();
+    if (!energyHeatmapMap) return;
+    if (energyHeatmapLayer) energyHeatmapMap.removeLayer(energyHeatmapLayer);
+    const energies = buildings.map((building) => building.future_energy).sort((a, b) => a - b);
+    const low = energies[Math.floor(energies.length * 0.33)] || 0;
+    const high = energies[Math.floor(energies.length * 0.66)] || 0;
+    const markers = [];
+    buildings.forEach((building) => {
+        if (building.latitude == null || building.longitude == null) return;
+        markers.push(
+            L.circleMarker([building.latitude, building.longitude], {
+                radius: 7,
+                color: "#0f172a",
+                weight: 1,
+                fillColor: getEnergyColor(building.future_energy, low, high),
+                fillOpacity: 1,
+            }).bindPopup(`${building.name}<br>Predicted Energy: ${formatNumber(building.future_energy)} kWh`)
+        );
+    });
+    energyHeatmapLayer = L.layerGroup(markers).addTo(energyHeatmapMap);
+}
+
+function updateSimulation() {
+    const energyPercent = Number(energySlider ? energySlider.value : 0);
+    const state = buildSimulationState(energyPercent);
+
+    if (document.getElementById("energySliderValue")) {
+        document.getElementById("energySliderValue").textContent = `${state.energyPercent}%`;
+        document.getElementById("currentEnergyDemand").textContent = formatNumber(state.currentEnergyDemand);
+        document.getElementById("projectedEnergyDemand").textContent = formatNumber(state.projectedEnergyDemand);
+    }
+
+    document.querySelectorAll(".energy-building-row").forEach((row) => {
+        const building = state.simulatedBuildings.find((item) => item.name === row.dataset.buildingName);
+        if (building) row.querySelector(".simulated-energy-cell").textContent = formatNumber(building.future_energy);
+    });
+
+    renderEnergyMap(state.simulatedBuildings);
+}
+
+const energySlider = document.getElementById("energySimulationSlider");
+if (energySlider) {
+    energySlider.addEventListener("input", updateSimulation);
+}
+updateSimulation();
+</script>
+{% endblock %}

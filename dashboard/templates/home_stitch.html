@@ -81,23 +81,7 @@ body {
 </div>
 
 <!-- Navigation Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-7xl">
-
-<!-- Campus Overview -->
-<div class="group bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-    <div class="w-14 h-14 bg-sage-green dark:bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-6">
-        <span class="material-icons text-3xl">dashboard</span>
-    </div>
-    <h3 class="text-2xl font-bold text-forest-green dark:text-white mb-3">Campus Overview</h3>
-    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
-        View high-level analytics, occupancy rates, and infrastructure health data across the entire institution.
-    </p>
-    <a href="{% url 'dashboard_ui' %}">
-        <button class="w-full bg-primary text-white py-3.5 rounded-lg font-bold">
-            Enter Dashboard
-        </button>
-    </a>
-</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-5xl">
 
 <!-- Visitor -->
 <div class="group bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
@@ -124,7 +108,7 @@ body {
     <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
         Access secure administrative controls and system maintenance.
     </p>
-    <a href="/admin/">
+    <a href="{% url 'admin_login' %}">
         <button class="w-full bg-primary text-white py-3.5 rounded-lg font-bold">
             Secure Login
         </button>

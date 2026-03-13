@@ -2,18 +2,49 @@ import heapq
 import json
 from datetime import time
 
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.db.models import Q
-from django.shortcuts import render
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
+from .forms import (
+    BuildingForm,
+    EnergyConsumptionForm,
+    EventForm,
+    PathForm,
+    PhaseOccupancyForm,
+    StyledAuthenticationForm,
+)
 from .ml_models.data_loader import STUDY_LEAVE_MONTHS, load_energy_consumption_dataframe
 from .ml_models.energy_predictor import predict_energy_for_years, predict_energy_per_building
-from .models import Building, Event, Path, PhaseOccupancy
+from .models import Building, EnergyConsumption, Event, Path, PhaseOccupancy
 
 
 def home(request):
     return render(request, "home_stitch.html")
+
+
+class AdminLoginView(LoginView):
+    template_name = "admin_login.html"
+    authentication_form = StyledAuthenticationForm
+    redirect_authenticated_user = True
+
+    def get_success_url(self):
+        return reverse_lazy("admin_dashboard")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if not self.request.user.is_staff and not self.request.user.is_superuser:
+            logout(self.request)
+            messages.error(self.request, "Only staff accounts can access the admin dashboard.")
+            return redirect("admin_login")
+        return response
 
 
 def is_study_leave_date(target_date):
@@ -322,12 +353,10 @@ def _build_energy_payload():
     }
 
 
-# ---------------- ADMIN DASHBOARD ----------------
-@login_required
-def admin_dashboard_stitch(request):
+def _build_operations_dashboard_context():
     phase = get_time_phase()
 
-    buildings = Building.objects.filter(is_navigational_only=False)
+    buildings = list(Building.objects.filter(is_navigational_only=False))
 
     for b in buildings:
         occ = get_effective_occupancy(b, phase)
@@ -383,7 +412,7 @@ def admin_dashboard_stitch(request):
         for b in buildings
     ]
 
-    return render(request, "dashboard_stitch.html", {
+    return {
         "buildings": buildings,
         "time_phase": phase,
         "active_events": active_events,
@@ -391,7 +420,291 @@ def admin_dashboard_stitch(request):
         "occupancy_projection": occupancy_projection,
         "energy_payload": energy_payload,
         "simulation_buildings": simulation_buildings,
-    })
+    }
+
+
+ADMIN_MODEL_CONFIG = {
+    "building": {
+        "model": Building,
+        "form_class": BuildingForm,
+        "title": "Building",
+        "title_plural": "Buildings",
+        "description": "Manage campus buildings, capacities, and navigation coordinates.",
+        "fields": ["name", "building_type", "capacity", "is_navigational_only"],
+    },
+    "event": {
+        "model": Event,
+        "form_class": EventForm,
+        "title": "Event",
+        "title_plural": "Events",
+        "description": "Maintain scheduled events and their assigned locations.",
+        "fields": ["title", "event_type", "event_date", "start_time", "end_time"],
+    },
+    "phaseoccupancy": {
+        "model": PhaseOccupancy,
+        "form_class": PhaseOccupancyForm,
+        "title": "Phase Occupancy",
+        "title_plural": "Phase Occupancy",
+        "description": "Tune occupancy percentages for each building and time phase.",
+        "fields": ["building", "time_phase", "expected_percentage"],
+    },
+    "path": {
+        "model": Path,
+        "form_class": PathForm,
+        "title": "Path",
+        "title_plural": "Paths",
+        "description": "Edit walking routes and direction hints used in navigation.",
+        "fields": ["from_building", "to_building", "distance", "direction_hint"],
+    },
+    "energyconsumption": {
+        "model": EnergyConsumption,
+        "form_class": EnergyConsumptionForm,
+        "title": "Energy Consumption",
+        "title_plural": "Energy Consumption",
+        "description": "Track campus and building-level energy records.",
+        "fields": ["scope", "building", "year", "month", "energy_consumed_kwh"],
+    },
+}
+
+
+def _ensure_staff_user(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('admin_login')}?next={request.path}")
+    if not request.user.is_staff and not request.user.is_superuser:
+        messages.error(request, "Only staff accounts can access this area.")
+        return redirect("home")
+    return None
+
+
+def _get_admin_model_config(model_key):
+    config = ADMIN_MODEL_CONFIG.get(model_key)
+    if not config:
+        raise Http404("Unknown admin model.")
+    return config
+
+
+def _render_admin_model_list(request, model_key, extra_context=None):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    config = _get_admin_model_config(model_key)
+    queryset = config["model"].objects.all()
+
+    if model_key == "building":
+        queryset = queryset.order_by("name")
+    elif model_key == "event":
+        queryset = queryset.order_by("-event_date", "-start_time")
+    elif model_key == "phaseoccupancy":
+        queryset = queryset.select_related("building").order_by("building__name", "time_phase")
+    elif model_key == "path":
+        queryset = queryset.select_related("from_building", "to_building").order_by("from_building__name", "to_building__name")
+    elif model_key == "energyconsumption":
+        queryset = queryset.select_related("building").order_by("-year", "-month", "scope")
+
+    context = {
+        "page_title": config["title_plural"],
+        "section_title": config["title_plural"],
+        "section_description": config["description"],
+        "model_key": model_key,
+        "config": config,
+        "rows": queryset,
+        "columns": config["fields"],
+    }
+    if extra_context:
+        context.update(extra_context)
+    return render(request, "admin_model_list.html", context)
+
+
+def _render_admin_model_form(request, model_key, pk=None):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    config = _get_admin_model_config(model_key)
+    instance = get_object_or_404(config["model"], pk=pk) if pk is not None else None
+    form = config["form_class"](request.POST or None, instance=instance)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        action = "updated" if instance else "created"
+        messages.success(request, f"{config['title']} {action} successfully.")
+        return redirect("admin_model_list", model_key=model_key)
+
+    return render(
+        request,
+        "admin_model_form.html",
+        {
+            "page_title": f"{'Edit' if instance else 'Add'} {config['title']}",
+            "section_title": f"{'Edit' if instance else 'Add'} {config['title']}",
+            "section_description": config["description"],
+            "config": config,
+            "model_key": model_key,
+            "form": form,
+            "object": instance,
+        },
+    )
+
+
+def _render_admin_model_delete(request, model_key, pk):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    config = _get_admin_model_config(model_key)
+    instance = get_object_or_404(config["model"], pk=pk)
+
+    return render(
+        request,
+        "admin_confirm_delete.html",
+        {
+            "page_title": f"Delete {config['title']}",
+            "section_title": f"Delete {config['title']}",
+            "section_description": "This action updates live project data and cannot be undone automatically.",
+            "config": config,
+            "model_key": model_key,
+            "object": instance,
+        },
+    )
+
+
+def admin_dashboard(request):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    modules = [
+        {
+            "title": "Building Occupancy",
+            "description": "Review building occupancy phase rules and update expected percentages for each time slot.",
+            "icon": "groups",
+            "href": reverse("admin_occupancy"),
+            "count": PhaseOccupancy.objects.count(),
+            "count_label": "occupancy rules",
+        },
+        {
+            "title": "Energy Consumption",
+            "description": "View and edit campus energy records without using the default Django admin interface.",
+            "icon": "bolt",
+            "href": reverse("admin_energy"),
+            "count": EnergyConsumption.objects.count(),
+            "count_label": "energy records",
+        },
+        {
+            "title": "Manage Data",
+            "description": "Open the full custom data management workspace for buildings, events, occupancy, paths, and energy.",
+            "icon": "database",
+            "href": reverse("admin_manage_data"),
+            "count": sum(config["model"].objects.count() for config in ADMIN_MODEL_CONFIG.values()),
+            "count_label": "managed rows",
+        },
+    ]
+
+    return render(
+        request,
+        "admin_dashboard.html",
+        {
+            "page_title": "Admin Dashboard",
+            "modules": modules,
+        },
+    )
+
+
+def admin_manage_data(request):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    collections = []
+    for key, config in ADMIN_MODEL_CONFIG.items():
+        collections.append(
+            {
+                "key": key,
+                "title": config["title_plural"],
+                "description": config["description"],
+                "count": config["model"].objects.count(),
+                "href": reverse("admin_model_list", kwargs={"model_key": key}),
+            }
+        )
+
+    return render(
+        request,
+        "admin_manage_data.html",
+        {
+            "page_title": "Manage Data",
+            "collections": collections,
+        },
+    )
+
+
+def admin_occupancy(request):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    context = _build_operations_dashboard_context()
+    context.update(
+        {
+            "page_title": "Building Occupancy",
+            "manage_href": reverse("admin_model_list", kwargs={"model_key": "phaseoccupancy"}),
+        }
+    )
+    return render(request, "admin_occupancy_module.html", context)
+
+
+def admin_energy(request):
+    access_denied = _ensure_staff_user(request)
+    if access_denied:
+        return access_denied
+
+    context = _build_operations_dashboard_context()
+    context.update(
+        {
+            "page_title": "Energy Consumption",
+            "manage_href": reverse("admin_model_list", kwargs={"model_key": "energyconsumption"}),
+        }
+    )
+    return render(request, "admin_energy_module.html", context)
+
+
+def admin_model_list(request, model_key):
+    return _render_admin_model_list(request, model_key)
+
+
+def admin_model_create(request, model_key):
+    return _render_admin_model_form(request, model_key)
+
+
+def admin_model_edit(request, model_key, pk):
+    return _render_admin_model_form(request, model_key, pk=pk)
+
+
+def admin_model_delete(request, model_key, pk):
+    if request.method == "POST":
+        access_denied = _ensure_staff_user(request)
+        if access_denied:
+            return access_denied
+
+        config = _get_admin_model_config(model_key)
+        instance = get_object_or_404(config["model"], pk=pk)
+        instance.delete()
+        messages.success(request, f"{config['title']} deleted successfully.")
+        return redirect("admin_model_list", model_key=model_key)
+
+    return _render_admin_model_delete(request, model_key, pk)
+
+
+@require_POST
+def admin_logout(request):
+    logout(request)
+    messages.success(request, "You have been logged out.")
+    return redirect("home")
+
+
+# ---------------- ADMIN DASHBOARD ----------------
+@login_required
+def admin_dashboard_stitch(request):
+    return redirect("admin_dashboard")
 
 
 # ---------------- VISITOR PAGE ----------------
