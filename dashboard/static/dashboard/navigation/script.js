@@ -1,12 +1,65 @@
 // initialize map
-const map = L.map("map").setView([9.7270,76.7260],17);
+const defaultCenter = [9.7270, 76.7260];
+const map = L.map("map").setView(defaultCenter, 17);
 
 // base map
 L.tileLayer(
 "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 {
-attribution:"© OpenStreetMap"
+attribution:"&copy; OpenStreetMap",
+referrerPolicy:"origin"
 }).addTo(map);
+
+function collectCampusPoints(){
+const points = [];
+
+if(Array.isArray(routeCoords)){
+routeCoords.forEach(p => points.push([p.lat, p.lng]));
+}
+
+if(Array.isArray(campusPaths)){
+campusPaths.forEach(segment => {
+if(Array.isArray(segment.coords)){
+segment.coords.forEach(p => points.push([p.lat, p.lng]));
+}
+});
+}
+
+if(Array.isArray(buildingsData)){
+buildingsData.forEach(b => points.push([b.lat, b.lng]));
+}
+
+return points.filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+}
+
+const campusPoints = collectCampusPoints();
+const campusBounds = campusPoints.length ? L.latLngBounds(campusPoints) : null;
+
+function isWithinCampus(latlng){
+if(!campusBounds || !campusBounds.isValid()) return true;
+return campusBounds.pad(0.15).contains(latlng);
+}
+
+function removeYouAreHereLayer(layer){
+if(!layer || typeof layer.getPopup !== "function") return;
+const popup = layer.getPopup();
+if(!popup || typeof popup.getContent !== "function") return;
+const content = String(popup.getContent());
+if(content.includes("You are here")){
+map.removeLayer(layer);
+}
+}
+
+map.on("layeradd", function(e){
+removeYouAreHereLayer(e.layer);
+});
+
+setTimeout(function(){
+map.eachLayer(function(layer){
+removeYouAreHereLayer(layer);
+});
+}, 0);
+
 
 // draw campus paths (grey)
 campusPaths.forEach(function(segment){
@@ -123,23 +176,3 @@ fillOpacity:1
 .bindPopup(`${p.building} (${p.building_type})<br>Predicted ${heatmapYear} energy: ${p.energy} kWh<br>Study-leave peak: ${p.study_leave_peak_kwh} kWh${alertMessage}`);
 });
 }
-
-// live user location
-let userMarker;
-
-map.locate({
-watch:true,
-setView:false,
-enableHighAccuracy:true
-});
-
-map.on("locationfound",function(e){
-
-if(!userMarker){
-userMarker = L.marker(e.latlng).addTo(map)
-.bindPopup("You are here");
-}else{
-userMarker.setLatLng(e.latlng);
-}
-
-});

@@ -1,5 +1,7 @@
 # pyright: reportMissingImports=false, reportMissingModuleSource=false
 from pathlib import Path
+import logging
+import pickle
 
 import joblib
 import pandas as pd
@@ -32,6 +34,27 @@ FEATURE_COLUMNS = [
     "is_study_leave",
     "is_peak_summer",
 ]
+
+logger = logging.getLogger(__name__)
+
+_MODEL_STATUS = {
+    "retrained": False,
+    "load_error": None,
+    "no_training_data": False,
+}
+
+
+def get_model_status(reset=False):
+    status = dict(_MODEL_STATUS)
+    if reset:
+        _MODEL_STATUS.update(
+            {
+                "retrained": False,
+                "load_error": None,
+                "no_training_data": False,
+            }
+        )
+    return status
 
 
 def _estimate_population(year):
@@ -121,15 +144,51 @@ def train_energy_model(save_model=True, model_type="random_forest"):
 
 def load_or_train_model(model_type="random_forest"):
     if MODEL_PATH.exists():
-        payload = joblib.load(MODEL_PATH)
-        if (
-            payload.get("feature_columns") == FEATURE_COLUMNS and
-            payload.get("model_version") == MODEL_VERSION
-        ):
-            return payload
+        try:
+            payload = joblib.load(MODEL_PATH)
+            if (
+                payload.get("feature_columns") == FEATURE_COLUMNS and
+                payload.get("model_version") == MODEL_VERSION
+            ):
+                _MODEL_STATUS.update(
+                    {
+                        "retrained": False,
+                        "load_error": None,
+                        "no_training_data": False,
+                    }
+                )
+                return payload
+        except (EOFError, pickle.UnpicklingError, ValueError) as exc:
+            # Corrupted or partially-written model file; rebuild it.
+            logger.warning("Energy model load failed; rebuilding.", exc_info=exc)
+            _MODEL_STATUS.update(
+                {
+                    "retrained": True,
+                    "load_error": f"{type(exc).__name__}",
+                    "no_training_data": False,
+                }
+            )
+            try:
+                MODEL_PATH.unlink()
+            except OSError:
+                pass
 
+    _MODEL_STATUS.update(
+        {
+            "retrained": True,
+            "load_error": _MODEL_STATUS.get("load_error"),
+            "no_training_data": False,
+        }
+    )
     pipeline = train_energy_model(save_model=True, model_type=model_type)
     if pipeline is None:
+        _MODEL_STATUS.update(
+            {
+                "retrained": False,
+                "load_error": _MODEL_STATUS.get("load_error"),
+                "no_training_data": True,
+            }
+        )
         return None
 
     return joblib.load(MODEL_PATH)

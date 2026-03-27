@@ -22,7 +22,11 @@ from .forms import (
     StyledAuthenticationForm,
 )
 from .ml_models.data_loader import STUDY_LEAVE_MONTHS, load_energy_consumption_dataframe
-from .ml_models.energy_predictor import predict_energy_for_years, predict_energy_per_building
+from .ml_models.energy_predictor import (
+    get_model_status,
+    predict_energy_for_years,
+    predict_energy_per_building,
+)
 from .models import Building, EnergyConsumption, Event, Path, PhaseOccupancy
 
 
@@ -643,6 +647,23 @@ def admin_occupancy(request):
         return access_denied
 
     context = _build_operations_dashboard_context()
+    model_status = get_model_status(reset=True)
+    if model_status["no_training_data"]:
+        messages.warning(
+            request,
+            "Energy predictions are unavailable because there is no energy data to train the model yet.",
+        )
+    elif model_status["retrained"]:
+        if model_status["load_error"]:
+            messages.info(
+                request,
+                "Energy model was rebuilt because the saved model could not be loaded.",
+            )
+        else:
+            messages.info(
+                request,
+                "Energy model was rebuilt from the latest data.",
+            )
     context.update(
         {
             "page_title": "Building Occupancy",
@@ -658,6 +679,23 @@ def admin_energy(request):
         return access_denied
 
     context = _build_operations_dashboard_context()
+    model_status = get_model_status(reset=True)
+    if model_status["no_training_data"]:
+        messages.warning(
+            request,
+            "Energy predictions are unavailable because there is no energy data to train the model yet.",
+        )
+    elif model_status["retrained"]:
+        if model_status["load_error"]:
+            messages.info(
+                request,
+                "Energy model was rebuilt because the saved model could not be loaded.",
+            )
+        else:
+            messages.info(
+                request,
+                "Energy model was rebuilt from the latest data.",
+            )
     context.update(
         {
             "page_title": "Energy Consumption",
