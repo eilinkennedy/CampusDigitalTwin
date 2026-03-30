@@ -350,14 +350,13 @@ Select a start and destination building to generate a route with detailed walkin
 // @ts-nocheck
 var routeCoords = {{ route_coords|safe }};
 var campusPaths = {{ campus_paths|safe }};
-var buildingsData = {{ buildings_data|safe }};
-var energyHeatmapData = {{ energy_heatmap_data|safe }};
-var heatmapYear = {{ heatmap_year }};
+var buildingsData = [];
+var energyHeatmapData = [];
+var heatmapYear = null;
 
 </script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <script src="{% static 'dashboard/navigation/script.js' %}"></script>
 
 </body>

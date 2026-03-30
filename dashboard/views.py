@@ -817,65 +817,12 @@ def navigation(request):
 
     campus_paths = []
 
-    for p in Path.objects.all():
-        if (
-            p.from_building.latitude is not None and
-            p.from_building.longitude is not None and
-            p.to_building.latitude is not None and
-            p.to_building.longitude is not None
-        ):
-            campus_paths.append({
-                "coords": [
-                    {"lat": p.from_building.latitude, "lng": p.from_building.longitude},
-                    {"lat": p.to_building.latitude, "lng": p.to_building.longitude},
-                ]
-            })
-
-    heatmap_year = timezone.localdate().year + 1
-    heatmap_predictions = predict_energy_per_building(heatmap_year)
-    building_energy_lookup = {
-        item["building"]: item["predicted_kwh"]
-        for item in heatmap_predictions["building_predictions"]
-    }
-    buildings_data = []
-    phase = get_time_phase()
-    for b in Building.objects.all():
-        if b.latitude is not None and b.longitude is not None:
-            current_occupancy = get_effective_occupancy(b, phase)
-            capacity = b.capacity or 0
-            occupancy_percent = round((current_occupancy / capacity) * 100, 1) if capacity else 0
-            buildings_data.append({
-                "name": b.name,
-                "lat": b.latitude,
-                "lng": b.longitude,
-                "current_occupancy": current_occupancy,
-                "capacity": capacity,
-                "occupancy_percent": occupancy_percent,
-                "predicted_energy": round(float(building_energy_lookup.get(b.name, 0)), 2),
-            })
-
-    energy_heatmap_data = []
-    for item in heatmap_predictions["building_predictions"]:
-        if item.get("lat") is not None and item.get("lng") is not None:
-            energy_heatmap_data.append(
-                {
-                    "lat": item["lat"],
-                    "lng": item["lng"],
-                    "building": item["building"],
-                    "building_type": item["building_type"],
-                    "energy": item["predicted_kwh"],
-                    "study_leave_peak_kwh": item["study_leave_peak_kwh"],
-                    "study_leave_alert": item["study_leave_alert"],
-                    "study_leave_alert_reason": item["study_leave_alert_reason"],
-                }
-            )
-
     return render(request, "navigation.html", {
         "route_coords": json.dumps(route_coords),
         "campus_paths": json.dumps(campus_paths),
-        "buildings_data": json.dumps(buildings_data),
-        "energy_heatmap_data": json.dumps(energy_heatmap_data),
-        "heatmap_year": heatmap_year,
+        "buildings_data": json.dumps([]),
+        "energy_heatmap_data": json.dumps([]),
+        "heatmap_year": None,
         "route_buildings": route_buildings,
         "route_steps": route_steps,
         "route_summary": route_summary,
