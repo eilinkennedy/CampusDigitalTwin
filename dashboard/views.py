@@ -817,6 +817,34 @@ def navigation(request):
 
     campus_paths = []
 
+    for segment in Path.objects.select_related("from_building", "to_building"):
+        from_building = segment.from_building
+        to_building = segment.to_building
+
+        if None in (
+            from_building.latitude,
+            from_building.longitude,
+            to_building.latitude,
+            to_building.longitude,
+        ):
+            continue
+
+        campus_paths.append({
+            "from": {
+                "id": from_building.id,
+                "name": from_building.name,
+                "lat": from_building.latitude,
+                "lng": from_building.longitude,
+            },
+            "to": {
+                "id": to_building.id,
+                "name": to_building.name,
+                "lat": to_building.latitude,
+                "lng": to_building.longitude,
+            },
+            "distance": segment.distance,
+        })
+
     return render(request, "navigation.html", {
         "route_coords": json.dumps(route_coords),
         "campus_paths": json.dumps(campus_paths),
