@@ -21,6 +21,10 @@ except ImportError:
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Required when Django runs behind a reverse proxy such as Vercel.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -42,6 +46,9 @@ ALLOWED_HOSTS = [
 render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if render_hostname:
     ALLOWED_HOSTS.append(render_hostname)
+vercel_hostname = os.environ.get("VERCEL_URL", "").replace("https://", "").replace("http://", "")
+if vercel_hostname:
+    ALLOWED_HOSTS.append(vercel_hostname)
 if "localhost" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("localhost")
 if "127.0.0.1" not in ALLOWED_HOSTS:
@@ -143,8 +150,11 @@ STORAGES = {
     },
 }
 
+CSRF_TRUSTED_ORIGINS = []
 if render_hostname:
-    CSRF_TRUSTED_ORIGINS = [f"https://{render_hostname}"]
+    CSRF_TRUSTED_ORIGINS.append(f"https://{render_hostname}")
+if vercel_hostname:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{vercel_hostname}")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
