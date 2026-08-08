@@ -38,10 +38,12 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if host.strip()
+ALLOWED_HOSTS = [ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.vercel.app',
+]
+    
 ]
 render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if render_hostname:
